@@ -10,9 +10,10 @@ ExcelHelper 提供以下功能：
 2. 读取单元格值
 3. 写入单元格值
 4. 批量写入多个单元格
-5. 读取单元格公式
-6. 执行跨表查询
-7. 验证公式
+5. 批量读取多个单元格
+6. 读取单元格公式
+7. 执行跨表查询
+8. 验证公式
 
 ## 配置方法
 
@@ -138,6 +139,17 @@ ExcelHelper 提供以下功能：
    });
    console.log(result.content[0].text);
    ```
+
+5. 批量读取多个单元格：
+
+    ```javascript
+    const result = await mcpClient.callTool("ExcelHelper", "read_multiple_cells", {
+      workbookId: "1",
+      sheet: "Sheet1",
+      range: "A1:B2"
+    });
+    console.log(JSON.parse(result.content[0].text));
+    ```
 
 注意：在使用这些功能之前，请确保你已经通过 MCP 客户端连接到 ExcelHelper 服务器。
 

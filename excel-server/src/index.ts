@@ -132,6 +132,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
+        name: "read_multiple_cells",
+        description: "Read values from multiple cells or rows",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workbookId: {
+              type: "string",
+              description: "ID of the opened workbook"
+            },
+            sheet: {
+              type: "string",
+              description: "Name of the sheet"
+            },
+            range: {
+              type: "string",
+              description: "Cell range (e.g., 'A1:C3') or row range (e.g., '1:3')"
+            }
+          },
+          required: ["workbookId", "sheet", "range"]
+        }
+      },
+      {
         name: "write_cell",
         description: "Write a value to a cell",
         inputSchema: {
@@ -426,6 +448,49 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [{
           type: "text",
           text: `Successfully wrote ${cells.length} cell(s) in sheet ${sheet}. Saved to ${filePath}`
+        }]
+      };
+    }
+
+    case "read_multiple_cells": {
+      const { workbookId, sheet, range } = request.params.arguments as { workbookId: string, sheet: string, range: string };
+      const workbookData = openWorkbooks[workbookId];
+      if (!workbookData) {
+        throw new Error("Workbook not found");
+      }
+
+      const worksheet = workbookData.workbook.getWorksheet(sheet);
+      if (!worksheet) {
+        throw new Error("Sheet not found");
+      }
+
+      const [startCell, endCell] = range.split(':');
+      const startCellAddress = worksheet.getCell(startCell);
+      const endCellAddress = worksheet.getCell(endCell);
+
+      const startRow = startCellAddress.row;
+      const endRow = endCellAddress.row;
+      const startCol = startCellAddress.col;
+      const endCol = endCellAddress.col;
+
+      if (typeof startRow !== 'number' || typeof endRow !== 'number' ||
+          typeof startCol !== 'number' || typeof endCol !== 'number') {
+        throw new Error("Invalid cell range");
+      }
+
+      const values = [];
+      for (let row = startRow; row <= endRow; row++) {
+        const rowValues = [];
+        for (let col = startCol; col <= endCol; col++) {
+          rowValues.push(worksheet.getCell(row, col).value);
+        }
+        values.push(rowValues);
+      }
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(values)
         }]
       };
     }
