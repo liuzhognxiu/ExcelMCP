@@ -32,6 +32,7 @@ const openWorkbooks: { [id: string]: { workbook: InstanceType<typeof Workbook>, 
  * Create an MCP server with capabilities for resources (to list/read Excel files),
  * and tools (to perform Excel operations).
  */
+console.log("Creating MCP server...");
 const server = new Server(
   {
     name: "ExcelHelper",
@@ -44,6 +45,7 @@ const server = new Server(
     },
   }
 );
+console.log("MCP server created successfully.");
 
 /**
  * Handler for listing available Excel workbooks as resources.
@@ -53,6 +55,7 @@ const server = new Server(
  * - Human readable name and description
  */
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  console.log("Handling ListResourcesRequest...");
   return {
     resources: Object.entries(openWorkbooks).map(([id, workbook]) => ({
       uri: `excel:///${id}`,
@@ -68,6 +71,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
  * Takes an excel:// URI and returns the workbook information.
  */
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  console.log("Handling ReadResourceRequest...");
   const url = new URL(request.params.uri);
   const id = url.pathname.replace(/^\//, '');
   const workbookData = openWorkbooks[id];
@@ -93,6 +97,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
  * Exposes a single "create_note" tool that lets clients create new notes.
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
+  console.log("Handling ListToolsRequest...");
   return {
     tools: [
       {
@@ -107,6 +112,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             }
           },
           required: ["filePath"]
+        }
+      },
+      {
+        name: "get_all_sheets",
+        description: "Get all sheets in a workbook",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workbookId: {
+              type: "string",
+              description: "ID of the opened workbook"
+            }
+          },
+          required: ["workbookId"]
         }
       },
       {
@@ -300,6 +319,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
  * Handler for Excel tools.
  */
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  console.log(`Handling CallToolRequest for tool: ${request.params.name}`);
   switch (request.params.name) {
     case "open_excel": {
       const filePath = String(request.params.arguments?.filePath);
@@ -495,6 +515,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
+    case "get_all_sheets": {
+      const { workbookId } = request.params.arguments as { workbookId: string };
+      const workbookData = openWorkbooks[workbookId];
+      if (!workbookData) {
+        throw new Error("Workbook not found");
+      }
+
+      const sheetNames = workbookData.workbook.worksheets.map(sheet => sheet.name);
+
+      const formattedText = `Available sheets:\n${sheetNames.map((name, index) => `${index + 1}. ${name}`).join('\n')}\n\nTo select a sheet, use the "read_cell" or "read_multiple_cells" tool with the desired sheet name.`;
+
+      return {
+        content: [{
+          type: "text",
+          text: formattedText
+        }]
+      };
+    }
+
     default: {
       throw new Error("Unknown tool");
     }
@@ -506,8 +545,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
  * This allows the server to communicate via standard input/output streams.
  */
 async function main() {
+  console.log("Starting Excel Helper server...");
   const transport = new StdioServerTransport();
-  await server.connect(transport);
+  try {
+    await server.connect(transport);
+    console.log("Server connected successfully.");
+  } catch (error) {
+    console.error("Error connecting server:", error);
+  }
 }
 
 main().catch((error) => {
