@@ -2,6 +2,16 @@
 
 ExcelHelper 是一个基于 Model Context Protocol (MCP) 的服务器，提供 Excel 文件操作功能。它允许用户通过 MCP 工具执行各种 Excel 相关的操作，如打开文件、读写单元格、进行跨表查询等。
 
+## 最新更新（2025年5月27日）
+
+今天我们对 ExcelHelper 进行了以下改进：
+
+1. 在 `excel-server/src/index.ts` 文件中添加了 "get_all_sheets" 功能的实现。
+2. 修改了 "get_all_sheets" 工具的返回格式，现在它会返回一个格式化的 sheet 列表。
+3. 添加了更多的日志输出，以便更好地诊断潜在问题。
+4. 测试并验证了 "open_excel" 和 "get_all_sheets" 功能。
+5. 分析了 Sheet1（奖励类型和格式说明）和 Sheet2（实际配置）的内容，并提供了改进建议。
+
 ## 功能
 
 ExcelHelper 提供以下功能：
@@ -14,6 +24,7 @@ ExcelHelper 提供以下功能：
 6. 读取单元格公式
 7. 执行跨表查询
 8. 验证公式
+9. 获取所有 sheet 名称
 
 ## 配置方法
 
@@ -22,7 +33,7 @@ ExcelHelper 提供以下功能：
 2. 克隆此仓库到本地：
 
    ```
-   git clone https://github.com/your-repo/ExcelHelper.git
+   git clone 本仓库
    cd ExcelHelper
    ```
 
@@ -35,6 +46,7 @@ ExcelHelper 提供以下功能：
 4. 构建项目：
 
    ```
+   cd excel-server
    npm run build
    ```
 
@@ -43,6 +55,8 @@ ExcelHelper 提供以下功能：
    ```
    node build/index.js
    ```
+
+注意：在执行构建和启动操作之前，请确保你已经进入 `excel-server` 目录。
 
 ## 在 Roo Code 中启动服务
 
@@ -149,6 +163,15 @@ ExcelHelper 提供以下功能：
       range: "A1:B2"
     });
     console.log(JSON.parse(result.content[0].text));
+    ```
+
+6. 获取所有 sheet 名称：
+
+    ```javascript
+    const result = await mcpClient.callTool("ExcelHelper", "get_all_sheets", {
+      workbookId: "1"
+    });
+    console.log(result.content[0].text);
     ```
 
 注意：在使用这些功能之前，请确保你已经通过 MCP 客户端连接到 ExcelHelper 服务器。
