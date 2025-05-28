@@ -101,6 +101,95 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
+        name: "create_worksheet",
+        description: "Create a new worksheet in an existing workbook",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workbookId: {
+              type: "string",
+              description: "ID of the opened workbook"
+            },
+            sheetName: {
+              type: "string",
+              description: "Name of the new worksheet"
+            }
+          },
+          required: ["workbookId", "sheetName"]
+        }
+      },
+      {
+        name: "add_style",
+        description: "Add or modify cell style",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workbookId: {
+              type: "string",
+              description: "ID of the opened workbook"
+            },
+            sheet: {
+              type: "string",
+              description: "Name of the sheet"
+            },
+            cell: {
+              type: "string",
+              description: "Cell address (e.g., 'A1')"
+            },
+            style: {
+              type: "object",
+              description: "Style properties",
+              properties: {
+                fill: {
+                  type: "string",
+                  description: "Fill color (e.g., '#FF0000' for red)"
+                },
+                font: {
+                  type: "object",
+                  properties: {
+                    bold: { type: "boolean" },
+                    color: { type: "string" }
+                  }
+                }
+              }
+            }
+          },
+          required: ["workbookId", "sheet", "cell", "style"]
+        }
+      },
+      {
+        name: "add_table",
+        description: "Add a table with modification suggestions",
+        inputSchema: {
+          type: "object",
+          properties: {
+            workbookId: {
+              type: "string",
+              description: "ID of the opened workbook"
+            },
+            sheet: {
+              type: "string",
+              description: "Name of the sheet"
+            },
+            startCell: {
+              type: "string",
+              description: "Start cell of the table (e.g., 'A1')"
+            },
+            data: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  suggestion: { type: "string" },
+                  priority: { type: "string", enum: ["high", "medium", "low"] }
+                }
+              }
+            }
+          },
+          required: ["workbookId", "sheet", "startCell", "data"]
+        }
+      },
+      {
         name: "open_excel",
         description: "Open an Excel file",
         inputSchema: {
@@ -321,6 +410,129 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   console.log(`Handling CallToolRequest for tool: ${request.params.name}`);
   switch (request.params.name) {
+    case "create_worksheet": {
+      const { workbookId, sheetName } = request.params.arguments as { workbookId: string, sheetName: string };
+      const workbookData = openWorkbooks[workbookId];
+      if (!workbookData) {
+        throw new Error("Workbook not found");
+      }
+      const { workbook, filePath } = workbookData;
+      try {
+        const newSheet = workbook.addWorksheet(sheetName);
+        await workbook.xlsx.writeFile(filePath);
+        return {
+          content: [{
+            type: "text",
+            text: `Created new worksheet '${sheetName}' in workbook ${workbookId}`
+          }]
+        };
+      } catch (error) {
+        console.error('Error creating worksheet:', error);
+        throw new Error(`Failed to create worksheet: ${(error as Error).message}`);
+      }
+    }
+
+    case "add_style": {
+      const { workbookId, sheet, cell, style } = request.params.arguments as { workbookId: string, sheet: string, cell: string, style: { fill?: string, font?: { bold?: boolean, color?: string } } };
+      const workbookData = openWorkbooks[workbookId];
+      if (!workbookData) {
+        throw new Error("Workbook not found");
+      }
+      const { workbook, filePath } = workbookData;
+      const worksheet = workbook.getWorksheet(sheet);
+      if (!worksheet) {
+        throw new Error("Sheet not found");
+      }
+      const targetCell = worksheet.getCell(cell);
+      if (style.fill) {
+        targetCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: style.fill.replace('#', '') }
+        };
+      }
+      if (style.font) {
+        const newFont: Partial<ExcelJS.Font> = {};
+        if (style.font.bold !== undefined) {
+          newFont.bold = style.font.bold;
+        }
+        if (style.font.color) {
+          newFont.color = { argb: style.font.color.replace('#', '') };
+        }
+        targetCell.font = {
+          ...targetCell.font,
+          ...newFont
+        };
+      }
+      await workbook.xlsx.writeFile(filePath);
+      return {
+        content: [{
+          type: "text",
+          text: `Applied style to cell ${cell} in sheet ${sheet} of workbook ${workbookId}`
+        }]
+      };
+    }
+
+    case "add_table": {
+      const { workbookId, sheet, startCell, data } = request.params.arguments as { workbookId: string, sheet: string, startCell: string, data: { suggestion: string, priority: 'high' | 'medium' | 'low' }[] };
+      const workbookData = openWorkbooks[workbookId];
+      if (!workbookData) {
+        throw new Error("Workbook not found");
+      }
+      const { workbook, filePath } = workbookData;
+      const worksheet = workbook.getWorksheet(sheet);
+      if (!worksheet) {
+        throw new Error("Sheet not found");
+      }
+      const startCellObj = worksheet.getCell(startCell);
+      const table = worksheet.addTable({
+        name: 'SuggestionTable',
+        ref: startCell,
+        columns: [
+          { name: 'Suggestion', filterButton: true },
+          { name: 'Priority', filterButton: true }
+        ],
+        rows: data.map(item => [item.suggestion, item.priority])
+      });
+
+      // Apply colors based on priority
+      data.forEach((item, index) => {
+        const rowIndex = startCellObj.row + index + 1; // +1 for header row
+        const priorityCell = worksheet.getCell(rowIndex, startCellObj.col + 1);
+        switch (item.priority) {
+          case 'high':
+            priorityCell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFFF0000' } // Red
+            };
+            break;
+          case 'medium':
+            priorityCell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFFFFF00' } // Yellow
+            };
+            break;
+          case 'low':
+            priorityCell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FF00FF00' } // Green
+            };
+            break;
+        }
+      });
+
+      await workbook.xlsx.writeFile(filePath);
+      return {
+        content: [{
+          type: "text",
+          text: `Added table with ${data.length} suggestions to sheet ${sheet} of workbook ${workbookId}`
+        }]
+      };
+    }
+
     case "open_excel": {
       const filePath = String(request.params.arguments?.filePath);
       if (!filePath) {
